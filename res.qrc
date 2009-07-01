@@ -1,0 +1,5 @@
+<RCC>
+    <qresource>
+        <file>mdb/SMS.mdb</file>
+    </qresource>
+</RCC>
