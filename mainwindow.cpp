@@ -67,11 +67,6 @@ int MainWindow::sqlite_export(){
                 ui->progressBar->setVisible(true);
                 QString s;
                 while(ncount<nSize){
-                    ui->labelResult->setText(
-                            tr("Importing Records:").append(
-                                    QString::number(ncount+1)).append("/").append(
-                                            QString::number(nSize).append(":").append(
-                                                    QString::number(nSuccess))));
                     ui->progressBar->setValue(ncount+1);
                     sqlrecord = qModel->record(ncount++);
                     QString sqlcmdaction = "insert into SMS (";
@@ -104,6 +99,12 @@ int MainWindow::sqlite_export(){
                     QSqlQuery mquery(ldbodbc);
                     bool isok=mquery.exec(sqlcmdaction + ") " + sqlcmdvalue + ") ");
                     if(isok) nSuccess++;
+                    //label显示
+                    ui->labelResult->setText(
+                            tr("Importing Records:").append(
+                                    QString::number(ncount)).append("/").append(
+                                            QString::number(nSize).append(" Imported:").append(
+                                                    QString::number(nSuccess))));
                     //清除结果集
                     mquery.clear();
                     sqlcmdaction.clear();
