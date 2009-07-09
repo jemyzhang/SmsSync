@@ -16,6 +16,7 @@ public:
     MainWindow(QWidget *parent = 0);
     ~MainWindow();
     int sqlite_export();
+    bool sqlite_checkpwd();
 private:
     Ui::MainWindow *ui;
 

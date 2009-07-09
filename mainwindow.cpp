@@ -9,6 +9,10 @@
 #include <QTextCodec>
 #include <QFile>
 #include <QFileInfo>
+#include <QCoreApplication>
+#include <QSqlError>
+
+#include "LocalDataBase.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
@@ -16,36 +20,38 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     QTextCodec::setCodecForCStrings(QTextCodec::codecForLocale());
     ui->progressBar->setVisible(false);
+    //sqlite_checkpwd();
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
 }
+
+bool MainWindow::sqlite_checkpwd(){
+    LocalDataBase db;
+    if(db.connect()){
+        UINT nReceived,nSent;
+        db.GetSmsCount(nReceived,nSent);
+    }
+    return false;
+}
+
 int MainWindow::sqlite_export(){
     ui->btnImport->setEnabled(false);
     ui->labelResult->setText(tr("Connecting to Database..."));
-    QSqlDatabase ldb = QSqlDatabase::addDatabase("QSQLITE");
-    ldb.setDatabaseName("sms.db");
-    bool ok = ldb.open();
+    LocalDataBase ldb;
+    bool ok = ldb.connect();
     uint nSuccess = 0;
     if(ok){
-        QSqlQueryModel * qModel = new QSqlQueryModel;
-        //PN,PhoneNumber,Content,TimeStamps,SendReceive
-        qModel->setQuery("create temp table if not exists exec (name text,phonenumber text, content text,timestamps datetime,sendreceive numeric)",ldb);
-        qModel->setQuery("insert into exec (name,phonenumber,content,timestamps,sendreceive) "
-                         "select contacts_v1.Name as name, sms_v1.PN, sms_v1.content as content ,sms_v1.timestamps as timestamps,sms_v1.sendreceive as sendreceive "
-                         "from contacts_v1,sms_v1 where (contacts_v1.PhoneNumber =  sms_v1.PN)",ldb);
-        qModel->setQuery("insert into exec (phonenumber,content,timestamps,sendreceive) "
-                         "select PN as phonenumber,content,timestamps,sendreceive "
-                         "from sms_v1 where (select count(*) from contacts_v1 where contacts_v1.PhoneNumber=sms_v1.PN)=0");
-        qModel->setQuery("select count(*) from exec",ldb);
-        QSqlRecord sqlrecord = qModel->record(0);
-        uint nSize = sqlrecord.value(0).toUInt();
+
+        UINT nSent,nReceived;
+        bool rc = ldb.GetSmsCount(nReceived,nSent);
+        uint nSize = nSent + nReceived;
         if(nSize > 0){
             ui->progressBar->setRange(0,nSize);
 
-            qModel->setQuery("select * from exec",ldb);
+            ldb.CreateTempSmsTable();
 
             if(!QFileInfo("SMS.mdb").exists()){//create db
                 QFile file(":/mdb/SMS.mdb");
@@ -62,40 +68,39 @@ int MainWindow::sqlite_export(){
             bool okodbc = ldbodbc.open();
             bool bret;
             if(okodbc){
-                sqlrecord = qModel->record();
                 uint ncount = 0;
                 ui->progressBar->setVisible(true);
                 QString s;
                 while(ncount<nSize){
                     ui->progressBar->setValue(ncount+1);
-                    sqlrecord = qModel->record(ncount++);
+                    SmsSimpleData_t smsData;
+                    ldb.GetSms(ncount++,&smsData);
                     QString sqlcmdaction = "insert into SMS (";
                     QString sqlcmdvalue = "values(";
-                    QString name = sqlrecord.value(0).toString();
+                    QString name = QString::fromStdWString(smsData.ContactName);
                     if(!name.isNull() && !name.isEmpty()){
                         sqlcmdaction += "名字,";
                         sqlcmdvalue = sqlcmdvalue + "'" + name + "',";
                     }
-                    QString phonenumber = sqlrecord.value(1).toString();
+                    QString phonenumber = QString::fromStdWString(smsData.MobileNumber);
                     if(!phonenumber.isNull() && !phonenumber.isEmpty()){
                         sqlcmdaction += "号码,";
                         sqlcmdvalue = sqlcmdvalue + "'" + phonenumber + "',";
                     }
-                    QString content = sqlrecord.value(2).toString();
+                    QString content = QString::fromStdWString(smsData.Content);
                     if(!content.isNull() && !content.isEmpty()){
                         sqlcmdaction += "内容,";
                         sqlcmdvalue = sqlcmdvalue + "'" + content + "',";
                     }
-                    QString timestamps = sqlrecord.value(3).toString();
+                    QString timestamps = QString::fromStdWString(smsData.TimeStamp);
                     if(!timestamps.isNull() && !timestamps.isEmpty()){
                         sqlcmdaction += "时间,";
                         sqlcmdvalue = sqlcmdvalue + "'" + timestamps + "',";
                     }
-                    QString sendreceive = sqlrecord.value(4).toString();
-                    if(!sendreceive.isNull() && !sendreceive.isEmpty()){
-                        sqlcmdaction += "类型";
-                        sqlcmdvalue = sqlcmdvalue + "'" + (sendreceive == "1" ? "发" : "收") + "'";
-                    }
+                    bool sendreceive = smsData.SendReceiveFlag;
+                    sqlcmdaction += "类型";
+                    sqlcmdvalue = sqlcmdvalue + "'" + (sendreceive ? "发" : "收") + "'";
+
                     QSqlQuery mquery(ldbodbc);
                     bool isok=mquery.exec(sqlcmdaction + ") " + sqlcmdvalue + ") ");
                     if(isok) nSuccess++;
@@ -109,17 +114,18 @@ int MainWindow::sqlite_export(){
                     mquery.clear();
                     sqlcmdaction.clear();
                     sqlcmdvalue.clear();
+                    smsData.Reset();
                 }
                 ldbodbc.close();
             }else{
-                ui->labelResult->setText(tr("Could not open SMS.mdb"));
+                ui->labelResult->setText(ldbodbc.lastError().text());//tr("Could not open SMS.mdb"));
             }
         }else{
             ui->labelResult->setText(tr("No sms records found"));
         }
-        ldb.close();
+        ldb.disconnect();
     }else{
-        ui->labelResult->setText(tr("Could not found sms.db"));
+        ui->labelResult->setText(tr("Could not found or open sms.db"));
     }
     ui->progressBar->setVisible(false);
     ui->btnImport->setEnabled(true);
