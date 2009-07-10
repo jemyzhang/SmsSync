@@ -181,9 +181,11 @@ public:
     ~LocalDataBase();
 public:
     bool connect();
-    bool disconnect() { disconnectDatabase(); return true; }
+    bool disconnect() { return disconnectDatabase(); }
     bool decrypt(wchar_t* pwd,int len);
     bool encrypt(wchar_t* pwd,int len);
+    //check if pwd is correct, db will disconnected automatically after this operation
+    bool checkpwd(wchar_t* pwd,int len);
 public:
     //sms相关操作
     //获取短信数量
@@ -201,6 +203,7 @@ private:
     const void* pzTail;
     wchar_t sqlcmdw[512];
     wchar_t db_path[MAX_PATH];
+    bool bconnected;
 protected:
     bool connectDatabase(const wchar_t*);
     bool disconnectDatabase();

@@ -2,13 +2,13 @@
 
 LocalDataBase::LocalDataBase() {
     wchar_t currpath[MAX_PATH];
-    bool ret = true;
     if(File::GetCurrentPath(currpath)){
         C::wsprintf(db_path,L"%s\\sms.db",currpath);
     }else{
         C::wsprintf(db_path,DEFAULT_DB);
     }
     bTempTableCreated = false;
+    bconnected = false;
 }
 
 LocalDataBase::~LocalDataBase() {
@@ -16,14 +16,30 @@ LocalDataBase::~LocalDataBase() {
 }
 
 bool LocalDataBase::connect(){
-    bool rc = false;
-    if(File::FileExists(db_path)){	//file exists
-        rc = true;
-    }
-    rc = connectDatabase(db_path);
-    return rc;
-}
+    if(bconnected) return bconnected;
 
+    bconnected = connectDatabase(db_path);
+    return bconnected;
+}
+bool LocalDataBase::checkpwd(wchar_t* pwd,int len){
+    bool nRet = false;
+    if(!bconnected) connect();
+    if(!bconnected) return nRet;
+
+    if(pwd && len != 0){
+        decrypt(pwd,len);
+    }
+    C::wsprintf(sqlcmdw,L"select count(*) from sqlite_master");
+    int rc;
+    if ((rc = sqlite3_prepare16(db,sqlcmdw,-1,&pStmt,&pzTail)) == SQLITE_OK) {
+        nRet = (sqlite3_step(pStmt) == SQLITE_ROW);
+    }
+    sqlite3_finalize(pStmt);
+    if(!nRet){
+        disconnect();
+    }
+    return nRet;
+}
 bool LocalDataBase::decrypt(wchar_t* pwd, int len){
     char* temp = new char[len*2+1];
     int bytecnt = 0;
@@ -78,11 +94,11 @@ bool LocalDataBase::connectDatabase(const wchar_t * dbfile) {
 }
 
 bool LocalDataBase::disconnectDatabase() {
-    return (sqlite3_close(db) == SQLITE_OK);
+    bconnected = !(sqlite3_close(db) == SQLITE_OK);
+    return !bconnected;
 }
 
 void LocalDataBase::createDefaultDatabase() {
-    int rc = 0;
     //what ever create db
     //UNIQUE solved duplication problem
     //create account table

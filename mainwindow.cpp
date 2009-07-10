@@ -13,6 +13,10 @@
 #include <QSqlError>
 
 #include "LocalDataBase.h"
+#include "ui_password.h"
+
+wchar_t g_password[256];
+int g_password_len;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
@@ -20,7 +24,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     QTextCodec::setCodecForCStrings(QTextCodec::codecForLocale());
     ui->progressBar->setVisible(false);
-    //sqlite_checkpwd();
+//    sqlite_checkpwd();
 }
 
 MainWindow::~MainWindow()
@@ -29,24 +33,45 @@ MainWindow::~MainWindow()
 }
 
 bool MainWindow::sqlite_checkpwd(){
-    LocalDataBase db;
-    if(db.connect()){
-        UINT nReceived,nSent;
-        db.GetSmsCount(nReceived,nSent);
+    LocalDataBase ldb;
+    bool nRet = false;
+    wchar_t defaultpwd[6] = {0x10,0x15,0x13,0x18,0x08,0x01};
+    g_password_len = 6;
+    memcpy(g_password,defaultpwd,sizeof(wchar_t)*6);
+
+    if(!ldb.checkpwd(NULL,0)){
+        if(!ldb.checkpwd(defaultpwd,6)){
+            Ui_PasswordWnd w;
+            int rc = w.exec();
+            if(rc == QDialog::Accepted){
+                nRet = true;
+            }
+        }else{
+            nRet = true;
+        }
+    }else{
+        ldb.connect();
+        ldb.encrypt(defaultpwd,6);
+        ldb.disconnect();
+        nRet = true;
     }
-    return false;
+    return nRet;
 }
 
 int MainWindow::sqlite_export(){
     ui->btnImport->setEnabled(false);
     ui->labelResult->setText(tr("Connecting to Database..."));
+    if(!sqlite_checkpwd()){
+        ui->btnImport->setEnabled(true);
+        ui->labelResult->setText(tr("Password invalid, abort..."));
+        return 0;
+    }
     LocalDataBase ldb;
-    bool ok = ldb.connect();
     uint nSuccess = 0;
-    if(ok){
+    if(ldb.checkpwd(g_password,g_password_len)){
 
         UINT nSent,nReceived;
-        bool rc = ldb.GetSmsCount(nReceived,nSent);
+        ldb.GetSmsCount(nReceived,nSent);
         uint nSize = nSent + nReceived;
         if(nSize > 0){
             ui->progressBar->setRange(0,nSize);
@@ -63,24 +88,29 @@ int MainWindow::sqlite_export(){
                 fileout.write(b);
                 fileout.close();
             }
-            QSqlDatabase ldbodbc = QSqlDatabase::addDatabase("QODBC");
+            QSqlDatabase ldbodbc = QSqlDatabase::addDatabase("QODBC","sms");
             ldbodbc.setDatabaseName("DRIVER={Microsoft Access Driver (*.mdb)};FIL={MS Access};DBQ=SMS.mdb;UID=;PWD=1a2b3c4d5c6d7e8f");
             bool okodbc = ldbodbc.open();
-            bool bret;
             if(okodbc){
                 uint ncount = 0;
                 ui->progressBar->setVisible(true);
                 QString s;
+                QSqlQuery mquery(ldbodbc);
                 while(ncount<nSize){
                     ui->progressBar->setValue(ncount+1);
                     SmsSimpleData_t smsData;
                     ldb.GetSms(ncount++,&smsData);
+                    QString sqlcmdCheckdup = "select count(*) from SMS where ";
                     QString sqlcmdaction = "insert into SMS (";
                     QString sqlcmdvalue = "values(";
                     QString name = QString::fromStdWString(smsData.ContactName);
+                    bool bnext = false;
                     if(!name.isNull() && !name.isEmpty()){
                         sqlcmdaction += "名字,";
                         sqlcmdvalue = sqlcmdvalue + "'" + name + "',";
+                        sqlcmdCheckdup += "名字=";
+                        sqlcmdCheckdup = sqlcmdCheckdup + "'" + name + "'";
+                        bnext = true;
                     }
                     QString phonenumber = QString::fromStdWString(smsData.MobileNumber);
                     if(!phonenumber.isNull() && !phonenumber.isEmpty()){
@@ -96,14 +126,30 @@ int MainWindow::sqlite_export(){
                     if(!timestamps.isNull() && !timestamps.isEmpty()){
                         sqlcmdaction += "时间,";
                         sqlcmdvalue = sqlcmdvalue + "'" + timestamps + "',";
+                        if(bnext) sqlcmdCheckdup += " and ";
+                        sqlcmdCheckdup += "format(时间,'yyyy-mm-dd hh:nn:ss')=";
+                        sqlcmdCheckdup = sqlcmdCheckdup + "'" + timestamps + "'";
                     }
                     bool sendreceive = smsData.SendReceiveFlag;
                     sqlcmdaction += "类型";
                     sqlcmdvalue = sqlcmdvalue + "'" + (sendreceive ? "发" : "收") + "'";
+                    if(bnext) sqlcmdCheckdup += " and ";
+                    sqlcmdCheckdup += "类型=";
+                    sqlcmdCheckdup = sqlcmdCheckdup + "'" + (sendreceive ? "发" : "收") + "'";
 
-                    QSqlQuery mquery(ldbodbc);
-                    bool isok=mquery.exec(sqlcmdaction + ") " + sqlcmdvalue + ") ");
-                    if(isok) nSuccess++;
+                    bool isok = mquery.exec(sqlcmdCheckdup);
+                    int nDup = 0;
+                    if(isok){
+                        mquery.next();
+                        nDup = mquery.value(0).toInt();
+                    }
+                    //mquery.clear();
+                    if(nDup == 0){
+                        isok=mquery.exec(sqlcmdaction + ") " + sqlcmdvalue + ") ");
+                        if(isok){
+                            nSuccess++;
+                        }
+                    }
                     //label显示
                     ui->labelResult->setText(
                             tr("Importing Records:").append(
@@ -111,10 +157,12 @@ int MainWindow::sqlite_export(){
                                             QString::number(nSize).append(" Imported:").append(
                                                     QString::number(nSuccess))));
                     //清除结果集
-                    mquery.clear();
+                    //mquery.clear();
                     sqlcmdaction.clear();
                     sqlcmdvalue.clear();
+                    sqlcmdCheckdup.clear();
                     smsData.Reset();
+                    QApplication::processEvents();
                 }
                 ldbodbc.close();
             }else{
@@ -124,6 +172,7 @@ int MainWindow::sqlite_export(){
             ui->labelResult->setText(tr("No sms records found"));
         }
         ldb.disconnect();
+        QSqlDatabase::removeDatabase("sms");
     }else{
         ui->labelResult->setText(tr("Could not found or open sms.db"));
     }
