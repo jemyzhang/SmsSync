@@ -21,6 +21,7 @@ private:
     Ui::MainWindow *ui;
 
 private slots:
+    void on_btnView_clicked();
     void on_btnImport_clicked();
 };
 

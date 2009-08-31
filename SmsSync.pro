@@ -21,3 +21,5 @@ FORMS += mainwindow.ui \
     ui_password.ui
 RESOURCES += res.qrc
 LIBS += libsqlite3
+#LIBS = -L$${QT_BUILD_TREE}/plugins/sqldrivers -lsqlite3
+#QTPLUGIN     += qsqlodbc

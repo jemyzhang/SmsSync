@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QSqlError>
 
+#include <QProcess>
 #include "LocalDataBase.h"
 #include "ui_password.h"
 
@@ -60,6 +61,7 @@ bool MainWindow::sqlite_checkpwd(){
 
 int MainWindow::sqlite_export(){
     ui->btnImport->setEnabled(false);
+    ui->btnView->setEnabled(false);
     ui->labelResult->setText(tr("Connecting to Database..."));
     if(!sqlite_checkpwd()){
         ui->btnImport->setEnabled(true);
@@ -178,10 +180,34 @@ int MainWindow::sqlite_export(){
     }
     ui->progressBar->setVisible(false);
     ui->btnImport->setEnabled(true);
+    ui->btnView->setEnabled(true);
     return 0;
 }
 
 void MainWindow::on_btnImport_clicked()
 {
     sqlite_export();
+}
+
+void MainWindow::on_btnView_clicked()
+{
+    ui->btnImport->setEnabled(false);
+    ui->btnView->setEnabled(false);
+    if(!QFileInfo("view.exe").exists()){//create db
+        QFile file(":/mdb/LookSMS.exe");
+        bool nret = file.open(QIODevice::ReadOnly);
+        QByteArray b = file.readAll();
+        file.close();
+        QFile fileout("view.exe");
+        fileout.open(QIODevice::ReadWrite);
+        fileout.write(b);
+        fileout.close();
+    }
+    QProcess *process = new QProcess;
+    process->start("view.exe");
+    while(!process->waitForFinished(-1)){
+        qApp->processEvents();
+    }
+    ui->btnView->setEnabled(true);
+    ui->btnImport->setEnabled(true);
 }

@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/" >
         <file>mdb/SMS.mdb</file>
+        <file>mdb/LookSMS.exe</file>
     </qresource>
 </RCC>
