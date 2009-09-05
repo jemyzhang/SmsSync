@@ -12,8 +12,9 @@ using namespace std;
 #endif
 
 #define TABLE_CONTACT	L"contacts_v1"
-#define TABLE_SMS	L"sms_v1"
+#define TABLE_SMS	L"sms_v2"
 #define TABLE_TEMP	L"#sms#"
+#define TABLE_SMS_OLD	L"sms_v1"
 
 #define CREATE_CONTACT_TBL L"CREATE TABLE IF NOT EXISTS '%s' (PhoneNumber text primary key,Name text NOT NULL,Label numeric NOT NULL)"
 #define CREATE_SMS_TBL L"CREATE TABLE IF NOT EXISTS  '%s' (PN text not null, PhoneNumber text not null, Content text not null, TimeStamps datetime not null, SendReceive numeric not null)"
@@ -189,8 +190,10 @@ public:
 public:
     //sms相关操作
     //获取短信数量
+    bool GetSmsCount_v1(UINT &received, UINT &sent);
     bool GetSmsCount(UINT &received, UINT &sent);
     //获取短信条目
+    bool GetSms_v1(UINT idx,SmsSimpleData_ptr);
     bool GetSms(UINT idx,SmsSimpleData_ptr);
 public:
     bool CreateTempSmsTable();	//建立内联表格
@@ -238,5 +241,7 @@ public:
         sqlite3_finalize(pStmt);
         return rc;
     }
+public:
+    bool oldTableExists();	//检测表是否存在
 };
 

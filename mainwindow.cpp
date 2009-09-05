@@ -11,6 +11,8 @@
 #include <QFileInfo>
 #include <QCoreApplication>
 #include <QSqlError>
+#include <QMessageBox>
+#include <QTextCodec>
 
 #include <QProcess>
 #include "LocalDataBase.h"
@@ -60,20 +62,22 @@ bool MainWindow::sqlite_checkpwd(){
 }
 
 int MainWindow::sqlite_export(){
-    ui->btnImport->setEnabled(false);
-    ui->btnView->setEnabled(false);
-    ui->labelResult->setText(tr("Connecting to Database..."));
-    if(!sqlite_checkpwd()){
-        ui->btnImport->setEnabled(true);
-        ui->labelResult->setText(tr("Password invalid, abort..."));
-        return 0;
-    }
+
     LocalDataBase ldb;
     uint nSuccess = 0;
+    bool old_version;
     if(ldb.checkpwd(g_password,g_password_len)){
-
+        old_version = false;
+        if(ldb.oldTableExists()){
+            QMessageBox::information(this,tr("Attention"),tr("The db verion is too old, please update the m8smsbackup to the latest version"));
+            old_version = true;
+        }
         UINT nSent,nReceived;
-        ldb.GetSmsCount(nReceived,nSent);
+        if(old_version){
+            ldb.GetSmsCount_v1(nReceived,nSent);
+        }else{
+            ldb.GetSmsCount(nReceived,nSent);
+        }
         uint nSize = nSent + nReceived;
         if(nSize > 0){
             ui->progressBar->setRange(0,nSize);
@@ -103,7 +107,11 @@ int MainWindow::sqlite_export(){
                     ui->progressBar->setValue(ncount+1);
                     ui->progressBar->update();
                     SmsSimpleData_t smsData;
-                    ldb.GetSms(ncount++,&smsData);
+                    if(old_version){
+                        ldb.GetSms_v1(ncount++,&smsData);
+                    }else{
+                        ldb.GetSms(ncount++,&smsData);
+                    }
                     QString sqlcmdCheckdup = "select count(*) from SMS where ";
                     QString sqlcmdaction = "insert into SMS (";
                     QString sqlcmdvalue = "values(";
@@ -182,14 +190,24 @@ int MainWindow::sqlite_export(){
         ui->labelResult->setText(tr("Could not found or open sms.db"));
     }
     ui->progressBar->setVisible(false);
-    ui->btnImport->setEnabled(true);
-    ui->btnView->setEnabled(true);
     return 0;
 }
 
 void MainWindow::on_btnImport_clicked()
 {
+    ui->btnImport->setEnabled(false);
+    ui->btnView->setEnabled(false);
+    ui->labelResult->setText(tr("Connecting to Database..."));
+    if(!sqlite_checkpwd()){
+        ui->btnImport->setEnabled(true);
+        ui->labelResult->setText(tr("Password invalid, abort..."));
+        ui->btnImport->setEnabled(true);
+        ui->btnView->setEnabled(true);
+        return;
+    }
     sqlite_export();
+    ui->btnImport->setEnabled(true);
+    ui->btnView->setEnabled(true);
 }
 
 void MainWindow::on_btnView_clicked()

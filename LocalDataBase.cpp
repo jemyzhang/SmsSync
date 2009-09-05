@@ -127,6 +127,35 @@ bool LocalDataBase::setDatabasePassword(const char* pwd,int len){
 
 //////////////////////////////////////
 //sms操作
+bool LocalDataBase::GetSmsCount_v1(UINT &received, UINT &sent){
+    bool nRet = false;
+    UINT total = 0;
+    received = 0;
+    sent = 0;
+
+    C::wsprintf(sqlcmdw,L"select count(*) from %s",TABLE_SMS_OLD);
+    if (sqlite3_prepare16(db,sqlcmdw,-1,&pStmt,&pzTail) == SQLITE_OK) {
+        if (sqlite3_step(pStmt) == SQLITE_ROW){
+            total = sqlite3_column_int(pStmt, 0);
+            nRet = true;
+        }
+    }
+    sqlite3_finalize(pStmt);
+
+    if(total != 0){
+        C::wsprintf(sqlcmdw,L"select sum(SendReceive) from %s",
+            TABLE_SMS);
+        if (sqlite3_prepare16(db,sqlcmdw,-1,&pStmt,&pzTail) == SQLITE_OK) {
+            if (sqlite3_step(pStmt) == SQLITE_ROW){
+                sent = sqlite3_column_int(pStmt, 0);
+            }
+        }
+        sqlite3_finalize(pStmt);
+        received = total - sent;
+    }
+    return nRet;
+}
+
 bool LocalDataBase::GetSmsCount(UINT &received, UINT &sent){
     bool nRet = false;
     UINT total = 0;
@@ -195,6 +224,28 @@ bool LocalDataBase::GetSms(UINT idx,SmsSimpleData_ptr psms){
 
     if(psms == NULL) return nRet;
 
+    C::wsprintf(sqlcmdw,L"select name,phonenumber,content,strftime('%%Y-%%m-%%d %%H:%%M:%%S',timestamps),sendreceive from '%s' "
+                    L"where rowid=%d",
+                    TABLE_SMS,idx+1);
+    int nRc = 0;
+    if ((nRc = sqlite3_prepare16(db,sqlcmdw,-1,&pStmt,&pzTail)) == SQLITE_OK) {
+        if (sqlite3_step(pStmt) == SQLITE_ROW){
+            C::newstrcpy(&psms->ContactName,(LPWSTR) sqlite3_column_text16(pStmt, 0));
+            C::newstrcpy(&psms->MobileNumber,(LPWSTR) sqlite3_column_text16(pStmt, 1));
+            C::newstrcpy(&psms->Content,(LPWSTR) sqlite3_column_text16(pStmt, 2));
+            C::newstrcpy(&psms->TimeStamp,(LPWSTR) sqlite3_column_text16(pStmt, 3));
+            psms->SendReceiveFlag = (BOOL)sqlite3_column_int(pStmt, 4);
+            nRet = true;
+        }
+    }
+    return nRet;
+}
+
+bool LocalDataBase::GetSms_v1(UINT idx,SmsSimpleData_ptr psms){
+    bool nRet = false;
+
+    if(psms == NULL) return nRet;
+
     if(!bTempTableCreated){
         if(!CreateTempSmsTable()){  //创建不成功
             return nRet;
@@ -214,6 +265,28 @@ bool LocalDataBase::GetSms(UINT idx,SmsSimpleData_ptr psms){
             psms->SendReceiveFlag = (BOOL)sqlite3_column_int(pStmt, 4);
             nRet = true;
         }
+    }
+    return nRet;
+}
+
+bool LocalDataBase::oldTableExists(){
+    bool nRet = false;
+    bool c = false;	//如果为连接数据库，则打开数据后执行关闭，恢复初始状态
+    if(!bconnected) {
+        connect();
+        c = true;
+    }
+    if(!bconnected) return nRet;
+
+    C::wsprintf(sqlcmdw,L"select count(*) from sqlite_master where type='table' and name = '%s'",TABLE_SMS_OLD);
+    if (sqlite3_prepare16(db,sqlcmdw,-1,&pStmt,&pzTail) == SQLITE_OK) {
+        if(sqlite3_step(pStmt) == SQLITE_ROW){
+            nRet = (sqlite3_column_int(pStmt, 0) != 0);
+        }
+    }
+    sqlite3_finalize(pStmt);
+    if(c){
+        disconnect();
     }
     return nRet;
 }
