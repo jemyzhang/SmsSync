@@ -98,8 +98,10 @@ int MainWindow::sqlite_export(){
                 ui->progressBar->setVisible(true);
                 QString s;
                 QSqlQuery mquery(ldbodbc);
+                //mquery.exec("BEGIN TRANSACTION");
                 while(ncount<nSize){
                     ui->progressBar->setValue(ncount+1);
+                    ui->progressBar->update();
                     SmsSimpleData_t smsData;
                     ldb.GetSms(ncount++,&smsData);
                     QString sqlcmdCheckdup = "select count(*) from SMS where ";
@@ -166,6 +168,7 @@ int MainWindow::sqlite_export(){
                     smsData.Reset();
                     QApplication::processEvents();
                 }
+                //mquery.exec("COMMIT");
                 ldbodbc.close();
             }else{
                 ui->labelResult->setText(ldbodbc.lastError().text());//tr("Could not open SMS.mdb"));
@@ -193,18 +196,18 @@ void MainWindow::on_btnView_clicked()
 {
     ui->btnImport->setEnabled(false);
     ui->btnView->setEnabled(false);
-    if(!QFileInfo("view.exe").exists()){//create db
+    if(!QFileInfo("smsviewer.exe").exists()){//create db
         QFile file(":/mdb/LookSMS.exe");
         bool nret = file.open(QIODevice::ReadOnly);
         QByteArray b = file.readAll();
         file.close();
-        QFile fileout("view.exe");
+        QFile fileout("smsviewer.exe");
         fileout.open(QIODevice::ReadWrite);
         fileout.write(b);
         fileout.close();
     }
     QProcess *process = new QProcess;
-    process->start("view.exe");
+    process->start("smsviewer.exe");
     while(!process->waitForFinished(-1)){
         qApp->processEvents();
     }
