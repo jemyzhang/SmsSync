@@ -99,18 +99,30 @@ int MainWindow::sqlite_export(){
             bool okodbc = ldbodbc.open();
             if(okodbc){
                 uint ncount = 0;
+                uint _ncount = 0;
+                uint _nSize = nSize;    //用来计数显示使用，当index出错时
                 ui->progressBar->setVisible(true);
                 QString s;
                 QSqlQuery mquery(ldbodbc);
-                //mquery.exec("BEGIN TRANSACTION");
+                mquery.exec("BEGIN TRANSACTION");
                 while(ncount<nSize){
                     ui->progressBar->setValue(ncount+1);
                     ui->progressBar->update();
                     SmsSimpleData_t smsData;
                     if(old_version){
-                        ldb.GetSms_v1(ncount++,&smsData);
+                        if(ldb.GetSms_v1(ncount++,&smsData)){
+                            nSize++;
+                            continue;
+                        }else{
+                            _ncount++;
+                        }
                     }else{
-                        ldb.GetSms(ncount++,&smsData);
+                        if(!ldb.GetSms(ncount++,&smsData)){
+                            nSize++;
+                            continue;
+                        }else{
+                            _ncount++;
+                        }
                     }
                     QString sqlcmdCheckdup = "select count(*) from SMS where ";
                     QString sqlcmdaction = "insert into SMS (";
@@ -165,8 +177,8 @@ int MainWindow::sqlite_export(){
                     //label显示
                     ui->labelResult->setText(
                             tr("Importing Records:").append(
-                                    QString::number(ncount)).append("/").append(
-                                            QString::number(nSize).append(" Imported:").append(
+                                    QString::number(_ncount)).append("/").append(
+                                            QString::number(_nSize).append(" Imported:").append(
                                                     QString::number(nSuccess))));
                     //清除结果集
                     //mquery.clear();
@@ -176,7 +188,7 @@ int MainWindow::sqlite_export(){
                     smsData.Reset();
                     QApplication::processEvents();
                 }
-                //mquery.exec("COMMIT");
+                mquery.exec("COMMIT");
                 ldbodbc.close();
             }else{
                 ui->labelResult->setText(ldbodbc.lastError().text());//tr("Could not open SMS.mdb"));

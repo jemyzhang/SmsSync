@@ -26,7 +26,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>SmsSync v1.3 by JEMYZHANG</string>
+   <string>SmsSync v1.4 by JEMYZHANG</string>
   </property>
   <widget class="QWidget" name="centralWidget">
    <widget class="QPushButton" name="btnImport">
